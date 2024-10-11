@@ -3,6 +3,7 @@ import os
 import numpy as np
 import tensorflow as tf
 import tensorflow_io as tfio
+import joblib
 from glob import glob
 from sklearn.svm import SVC
 from sklearn.metrics import accuracy_score
@@ -26,8 +27,6 @@ if len(sys.argv) < 2:
 dicom_dir = sys.argv[1]
 dicom_files = glob(os.path.join(dicom_dir, "*.dcm"))
 
-print(f"Arquivos DICOM encontrados: {dicom_files}")
-
 if len(dicom_files) == 0:
     print("Nenhum arquivo DICOM encontrado no diretório fornecido.")
     sys.exit(1)
@@ -42,18 +41,25 @@ data = np.array([load_dcm_image(file) for file in dicom_files])
 X_train, X_test, y_train, y_test = train_test_split(data, labels, test_size=0.2, random_state=42)
 
 # Treinamento do modelo SVM com cuML
-clf = SVC(kernel='linear')  # Usando um kernel linear para SVM
-clf.fit(X_train, y_train)
+if os.path.exists('svm_model.joblib'):
+    print('modelo carregado')
+    clf = joblib.load('svm_model.joblib')
+else:
+    print('treinando modelo')
+    clf = SVC(kernel='linear')  # Usando um kernel linear para SVM
+    clf.fit(X_train, y_train)
+    joblib.dump(clf, 'svm_model.joblib')
+
 
 # Fazer previsões no conjunto de teste
 y_pred = clf.predict(X_test)
 
 # Avaliar o modelo
 accuracy = accuracy_score(y_test, y_pred)
-print(f'Acurácia do modelo SVM com GPU: {accuracy * 100:.2f}%')
+print(f'Acurácia do modelo SVM: {accuracy * 100:.2f}%')
 
 # Exemplo de como classificar um novo arquivo DICOM
-new_file = 'CDC8D806.dcm'
+new_file = 'A3A791BD.dcm'
 new_image = load_dcm_image(new_file)
 
 # Fazer a previsão

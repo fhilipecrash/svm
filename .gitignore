@@ -2,3 +2,5 @@ training/
 .vscode/
 mamografia.png
 svm_sklearn.png
+*.joblib
+*.dcm
