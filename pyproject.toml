@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "tensorflow-test"
+version = "0.1.0"
+description = ""
+authors = ["Fhilipe Coelho <fhilipecoelho.dev@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+matplotlib = "^3.9.2"
+tensorflow-io = "^0.37.1"
+scikit-learn = "^1.5.2"
+tensorflow = {extras = ["and-cuda"], version = "^2.17.0"}
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
