@@ -18,7 +18,7 @@ def load_dcm_image(file_path):
     else:
         img = img
 
-    img_resized = cv2.resize(img, (64, 64))
+    img_resized = cv2.resize(img, (128, 128))
     if len(img_resized.shape) == 2:
         img_resized = np.expand_dims(img_resized, axis=-1)
     
@@ -29,9 +29,7 @@ parser.add_argument('--train', type=str, help='Path to the DICOM directory for t
 parser.add_argument('--dcm', type=str, required=True, help='Path to a DICOM file for classification.')
 args = parser.parse_args()
 
-train_new_model = args.train is not None
-
-if train_new_model:
+if args.train is not None:
     print('Training model...')
     dicom_dir = args.train
     dicom_files = glob(os.path.join(dicom_dir, "*.dcm"))
