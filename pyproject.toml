@@ -6,11 +6,9 @@ authors = ["Fhilipe Coelho <fhilipecoelho.dev@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.13"
+python = ">=3.10,<=3.13"
 matplotlib = "^3.9.2"
-tensorflow-io = "^0.37.1"
 scikit-learn = "^1.5.2"
-tensorflow = {extras = ["and-cuda"], version = "^2.17.0"}
 joblib = "^1.4.2"
 pydicom = "^3.0.1"
 opencv-python = "^4.10.0.84"
