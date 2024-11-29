@@ -4,28 +4,90 @@ import numpy as np
 import joblib
 from glob import glob
 from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_val_score, train_test_split
+from skimage import data, color
 import pydicom
 import cv2
 import argparse
+import scipy.ndimage
+
+def anisotropic_diffusion(image, num_iterations, kappa, gamma=0.2, option=1):
+    """
+    Aplica difusão anisotrópica em uma imagem.
+
+    Parâmetros:
+        image (ndarray): Imagem de entrada.
+        num_iterations (int): Número de iterações.
+        kappa (float): Parâmetro de condução (controla a sensibilidade ao gradiente).
+        gamma (float): Taxa de atualização (normalmente entre 0 e 0.25 para estabilidade).
+        option (int): Escolha da função de condução:
+                      1: exp(-(gradient/kappa)^2)
+                      2: 1 / (1 + (gradient/kappa)^2)
+    Retorna:
+        ndarray: Imagem processada após difusão anisotrópica.
+    """
+    img = image.astype(np.float32)
+
+    # Máscaras de derivadas
+    dx = np.array([[1, -1]])
+    dy = np.array([[1], [-1]])
+    
+    for t in range(num_iterations):
+        # Calcula os gradientes
+        nablaN = scipy.ndimage.convolve(img, dy, mode='nearest')
+        nablaS = -scipy.ndimage.convolve(img, -dy, mode='nearest')
+        nablaW = scipy.ndimage.convolve(img, dx, mode='nearest')
+        nablaE = -scipy.ndimage.convolve(img, -dx, mode='nearest')
+        
+        # Calcula a função de condução
+        if option == 1:
+            cN = np.exp(-(nablaN / kappa) ** 2)
+            cS = np.exp(-(nablaS / kappa) ** 2)
+            cW = np.exp(-(nablaW / kappa) ** 2)
+            cE = np.exp(-(nablaE / kappa) ** 2)
+        elif option == 2:
+            cN = 1 / (1 + (nablaN / kappa) ** 2)
+            cS = 1 / (1 + (nablaS / kappa) ** 2)
+            cW = 1 / (1 + (nablaW / kappa) ** 2)
+            cE = 1 / (1 + (nablaE / kappa) ** 2)
+        
+        # Atualiza a imagem
+        img += gamma * (
+            cN * nablaN + cS * nablaS +
+            cW * nablaW + cE * nablaE
+        )
+    
+    return img
 
 def load_dcm_image(file_path):
     dcm_data = pydicom.dcmread(file_path)
+
     img = dcm_data.pixel_array.astype(float)
-    if np.max(img) > 0:
-        img = img / np.max(img)
+    img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)
+
+    # Aplica difusão anisotrópica e filtro mediano
+    img = anisotropic_diffusion(img, num_iterations=15, kappa=30, gamma=0.2, option=1)
+
+    window_center, window_width = 40, 80
+    lower_bound = window_center - (window_width / 2)
+    upper_bound = window_center + (window_width / 2)
+    img = np.clip(img, lower_bound, upper_bound)
+    img = (img - lower_bound) / (upper_bound - lower_bound + 1e-7)
     img_resized = cv2.resize(img, (128, 128))
+
     if len(img_resized.shape) == 2:
         img_resized = np.expand_dims(img_resized, axis=-1)
     return img_resized.flatten()
 
-parser = argparse.ArgumentParser(description='DICOM classification with SVM, RandomForest, or DecisionTree.')
+
+parser = argparse.ArgumentParser(description='DICOM classification with SVM, RandomForest, DecisionTree, GradientBoosting, or KNeighbors.')
 parser.add_argument('--train', type=str, help='Path to the DICOM directory for training.')
 parser.add_argument('--dcm', type=str, required=True, help='Path to a DICOM file for classification.')
-parser.add_argument('--classifier', type=str, default='svm', choices=['svm', 'random_forest', 'decision_tree'], help='Classifier to use: svm, random_forest, or decision_tree')
+parser.add_argument('--classifier', type=str, default='svm', choices=['svm', 'random_forest', 'decision_tree', 'gradient_boosting', 'knn'], help='Classifier to use: svm, random_forest, decision_tree, gradient_boosting, or knn')
 parser.add_argument('--cv', type=int, default=5, help='Number of folds for cross-validation.')
 args = parser.parse_args()
 
@@ -51,6 +113,10 @@ if args.train is not None:
         clf = RandomForestClassifier(n_estimators=100, random_state=42)
     elif args.classifier == "decision_tree":
         clf = DecisionTreeClassifier(random_state=42)
+    elif args.classifier == "gradient_boosting":
+        clf = GradientBoostingClassifier(n_estimators=100, random_state=42)
+    elif args.classifier == "knn":
+        clf = KNeighborsClassifier(n_neighbors=5)
 
     # Validação cruzada
     cross_val_scores = cross_val_score(clf, data, labels, cv=args.cv)
