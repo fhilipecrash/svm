@@ -66,7 +66,7 @@ def process_dicom_files_in_parallel(dicom_files, labels):
     print(files_with_indices)
     
     # Cria um pool de processos
-    with multiprocessing.Pool(processes=args.num_processes) as pool:
+    with multiprocessing.Pool(processes=args.proc) as pool:
         # Processa os arquivos DICOM em paralelo
         processed_data = pool.starmap(load_dcm_image, files_with_indices)
     
@@ -78,7 +78,7 @@ parser.add_argument('--train', type=str, help='Path to the DICOM directory for t
 parser.add_argument('--dcm', type=str, required=True, help='Path to a DICOM file for classification.')
 parser.add_argument('--classifier', type=str, default='svm', choices=['svm', 'random_forest', 'decision_tree', 'gradient_boosting', 'knn'], help='Classifier to use: svm, random_forest, decision_tree, gradient_boosting, or knn')
 parser.add_argument('--cv', type=int, default=5, help='Number of folds for cross-validation.')
-parser.add_argument('--num_processes', type=int, default=4, help='Number of processes for parallel processing.')
+parser.add_argument('--proc', type=int, default=4, help='Number of processes for parallel processing.')
 args = parser.parse_args()
 
 # Define o nome do arquivo do modelo com base no classificador escolhido

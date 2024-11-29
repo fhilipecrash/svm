@@ -1,72 +1,65 @@
-import matplotlib.pyplot as plt
-from skimage import data, color
 import numpy as np
-import scipy.ndimage
+import cupy as cp
+import pydicom
+import cv2
+from matplotlib import pyplot as plt
 
-def anisotropic_diffusion(image, num_iterations, kappa, gamma=0.2, option=1):
+def anisotropic_diffusion_with_median_filter_gpu(img, num_iter=5, kappa=50, gamma=0.1):
     """
-    Aplica difusão anisotrópica em uma imagem.
-
-    Parâmetros:
-        image (ndarray): Imagem de entrada.
-        num_iterations (int): Número de iterações.
-        kappa (float): Parâmetro de condução (controla a sensibilidade ao gradiente).
-        gamma (float): Taxa de atualização (normalmente entre 0 e 0.25 para estabilidade).
-        option (int): Escolha da função de condução:
-                      1: exp(-(gradient/kappa)^2)
-                      2: 1 / (1 + (gradient/kappa)^2)
-    Retorna:
-        ndarray: Imagem processada após difusão anisotrópica.
+    Aplica difusão anisotrópica com filtro mediano em uma imagem.
     """
-    img = image.astype(np.float32)
+    # Transfere a imagem para a GPU
+    img_gpu = cp.array(img, dtype=cp.float32)
 
-    # Máscaras de derivadas
-    dx = np.array([[1, -1]])
-    dy = np.array([[1], [-1]])
-    
-    for t in range(num_iterations):
-        # Calcula os gradientes
-        nablaN = scipy.ndimage.convolve(img, dy, mode='nearest')
-        nablaS = -scipy.ndimage.convolve(img, -dy, mode='nearest')
-        nablaW = scipy.ndimage.convolve(img, dx, mode='nearest')
-        nablaE = -scipy.ndimage.convolve(img, -dx, mode='nearest')
-        
-        # Calcula a função de condução
-        if option == 1:
-            cN = np.exp(-(nablaN / kappa) ** 2)
-            cS = np.exp(-(nablaS / kappa) ** 2)
-            cW = np.exp(-(nablaW / kappa) ** 2)
-            cE = np.exp(-(nablaE / kappa) ** 2)
-        elif option == 2:
-            cN = 1 / (1 + (nablaN / kappa) ** 2)
-            cS = 1 / (1 + (nablaS / kappa) ** 2)
-            cW = 1 / (1 + (nablaW / kappa) ** 2)
-            cE = 1 / (1 + (nablaE / kappa) ** 2)
-        
-        # Atualiza a imagem
-        img += gamma * (
-            cN * nablaN + cS * nablaS +
-            cW * nablaW + cE * nablaE
-        )
-    
+    # Realiza a difusão anisotrópica
+    for i in range(num_iter):
+        dx = cp.gradient(img_gpu, axis=1)
+        dy = cp.gradient(img_gpu, axis=0)
+        grad_magnitude = cp.sqrt(dx ** 2 + dy ** 2)
+        c = cp.exp(-(grad_magnitude / kappa) ** 2)
+        img_gpu += gamma * (c * dx + c * dy)
+
+    # Converte a imagem de volta para CPU
+    img_cpu = cp.asnumpy(img_gpu)
+
+    # Aplica o filtro mediano
+    img_cpu = cv2.medianBlur(img_cpu.astype(np.float32), 3)
+
+    return img_cpu
+
+def load_dcm_image(file_path):
+    """
+    Carrega e normaliza a imagem DICOM.
+    """
+    dcm_data = pydicom.dcmread(file_path)
+    img = dcm_data.pixel_array.astype(float)
+    img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)
     return img
 
-# Carregar uma imagem de exemplo
-image = color.rgb2gray(data.astronaut())  # Converter para tons de cinza
+def show_images(original, processed):
+    """
+    Mostra a imagem original e a tratada lado a lado.
+    """
+    plt.figure(figsize=(12, 6))
 
-# Aplicar difusão anisotrópica
-processed_image = anisotropic_diffusion(image, num_iterations=15, kappa=30, gamma=0.2, option=1)
+    # Imagem original
+    plt.subplot(1, 2, 1)
+    plt.title("Imagem Original")
+    plt.imshow(original, cmap='gray')
+    plt.axis("off")
 
-# Visualizar a imagem original e a processada
-plt.figure(figsize=(10, 5))
-plt.subplot(1, 2, 1)
-plt.title("Imagem Original")
-plt.imshow(image, cmap='gray')
-plt.axis('off')
+    # Imagem processada
+    plt.subplot(1, 2, 2)
+    plt.title("Imagem Processada")
+    plt.imshow(processed, cmap='gray')
+    plt.axis("off")
 
-plt.subplot(1, 2, 2)
-plt.title("Imagem Processada")
-plt.imshow(processed_image, cmap='gray')
-plt.axis('off')
+    plt.savefig("anisotropica.png")
 
-plt.savefig('anisotropic_diffusion.png')
+if __name__ == "__main__":
+    dicom_file = "B5_FED9C57C.dcm"  # Substitua pelo caminho do arquivo DICOM
+    original_image = load_dcm_image(dicom_file)
+    processed_image = anisotropic_diffusion_with_median_filter_gpu(original_image)
+
+    # Mostra o antes e o depois
+    show_images(original_image, processed_image)
