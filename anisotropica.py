@@ -57,7 +57,7 @@ def show_images(original, processed):
     plt.savefig("anisotropica.png")
 
 if __name__ == "__main__":
-    dicom_file = "B5_FED9C57C.dcm"  # Substitua pelo caminho do arquivo DICOM
+    dicom_file = "4CB444A9_3.dcm"  # Substitua pelo caminho do arquivo DICOM
     original_image = load_dcm_image(dicom_file)
     processed_image = anisotropic_diffusion_with_median_filter_gpu(original_image)
 
