@@ -30,6 +30,14 @@ def crop_breast_region(image):
     # Converte a imagem para o intervalo [0, 255] e tipo uint8
     image_uint8 = (image * 255).astype(np.uint8)
 
+    black_pixels = np.sum(image_uint8 == 0)
+    total_pixels = image_uint8.size
+    black_ratio = black_pixels / total_pixels
+
+    # Verificar se a maior parte da imagem contém fundo preto
+    if black_ratio > 0.5:  # Ajuste este valor se necessário
+        image_uint8 = cv2.bitwise_not(image_uint8)
+
     # Aplica limiar para segmentação
     _, binary_image = cv2.threshold(image_uint8, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
@@ -51,6 +59,7 @@ def crop_breast_region(image):
 
     # Realiza o corte
     cropped_image = image[start_y:end_y, start_x:end_x]
+    cv2.imwrite("cropped.png", cropped_image)
     return cropped_image
 
 def load_dcm_image(file_path, lol=0):
@@ -59,6 +68,7 @@ def load_dcm_image(file_path, lol=0):
 
     img = dcm_data.pixel_array.astype(float)
     img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)
+    cv2.imwrite("pydicom.png", img)
 
     # Aplica o recorte da região de interesse
     img_cropped = crop_breast_region(img)

@@ -6,7 +6,18 @@ from matplotlib import pyplot as plt
 image_path = "image.png"
 image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
 
-# Aplicar o limiar adaptativo para segmentar a região de interesse
+# Calcular a proporção de pixels pretos na imagem
+black_pixels = np.sum(image == 0)
+total_pixels = image.size
+black_ratio = black_pixels / total_pixels
+
+print(f"Proporção de pixels pretos: {black_ratio:.2%}")
+
+# Verificar se a maior parte da imagem contém fundo preto
+if black_ratio > 0.5:  # Ajuste este valor se necessário
+    print("A imagem tem fundo preto predominante. Invertendo as cores...")
+    image = cv2.bitwise_not(image)
+
 _, binary_image = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
 # Encontrar contornos
@@ -34,11 +45,10 @@ cropped_image = image[start_y:end_y, start_x:end_x]
 
 # Exibir o resultado
 plt.figure(figsize=(8, 8))
-plt.imshow(cropped_image, cmap="gray")
+plt.imshow(binary_image, cmap="gray")
 plt.axis("off")
 plt.title("Área de Interesse Cortada")
 
 # Salvar a imagem cortada
-output_path = "cropped_image3.png"
-cv2.imwrite(output_path, cropped_image)
-print(f"A imagem cortada foi salva em: {output_path}")
+cv2.imwrite("cropped_image1.png", cropped_image)
+
