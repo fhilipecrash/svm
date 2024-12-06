@@ -68,7 +68,6 @@ def load_dcm_image(file_path, lol=0):
 
     img = dcm_data.pixel_array.astype(float)
     img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)
-    cv2.imwrite("pydicom.png", img)
 
     # Aplica o recorte da região de interesse
     img_cropped = crop_breast_region(img)
@@ -82,6 +81,7 @@ def load_dcm_image(file_path, lol=0):
     img_clipped = np.clip(img_processed, lower_bound, upper_bound)
     img_normalized = (img_clipped - lower_bound) / (upper_bound - lower_bound + 1e-7)
     img_resized = cv2.resize(img_normalized, (256, 256))
+    cv2.imwrite("pydicom.png", img_resized)
 
     if len(img_resized.shape) == 2:
         img_resized = np.expand_dims(img_resized, axis=-1)
