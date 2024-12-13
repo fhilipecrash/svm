@@ -59,12 +59,14 @@ def crop_breast_region(image):
 
     # Realiza o corte
     cropped_image = image[start_y:end_y, start_x:end_x]
-    cv2.imshow("cropped.png", cropped_image)
+    # cv2.imshow("cropped.png", cropped_image)
     return cropped_image
 
 def load_dcm_image(file_path, lol=0):
     print(lol)
     dcm_data = pydicom.dcmread(file_path)
+    # Obtém a entrada DICOM 0028,0004, que representa Photometric Interpretation
+    print(dcm_data[0x28,0x04].value)
 
     img = dcm_data.pixel_array.astype(float)
     img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)

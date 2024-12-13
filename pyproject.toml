@@ -14,7 +14,9 @@ pydicom = "^3.0.1"
 scikit-image = "^0.24.0"
 opencv-python = "^4.10.0.84"
 opencv-cuda = "^0.0.2"
-cupy-cuda12x = "^13.3.0"
+pylibjpeg = {extras = ["all"], version = "^2.0.1"}
+python-gdcm = "^3.0.24.1"
+cupy-cuda11x = "^13.3.0"
 
 [build-system]
 requires = ["poetry-core"]
