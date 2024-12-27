@@ -17,6 +17,9 @@ opencv-cuda = "^0.0.2"
 pylibjpeg = { extras = ["all"], version = "^2.0.1" }
 python-gdcm = "^3.0.24.1"
 cupy-cuda11x = "^13.3.0"
+tensorflow = {extras = ["and-cuda"], version = "^2.18.0"}
+pyqt6 = "^6.8.0"
+tk = "^0.1.0"
 
 [build-system]
 requires = ["poetry-core"]
