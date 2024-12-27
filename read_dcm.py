@@ -75,7 +75,7 @@ def load_dcm_image(file_path):
     #     img = np.expand_dims(img, axis=-1)
     # cv2.imshow("imwrite.png", img)
     # cv2.waitKey(0)
-    cv2.imwrite(f"img/{file_path.split("/")[1]}.png", (img * 255).astype('uint8'))
+    cv2.imwrite(f"img/{file_path.split('/')[1]}.png", (img * 255).astype('uint8'))
     return img
 
 # load_dcm_image("training/B5_F4043F00.dcm")
