@@ -26,7 +26,7 @@ def anisotropic_diffusion_with_median_filter_gpu(img, num_iter=5, kappa=50, gamm
     img_cpu = cv2.medianBlur(img_cpu.astype(np.float32), 3)
     return img_cpu
 
-def crop_breast_region(image):
+def crop_breast_region(image, photometric_interpretation):
     # Converte a imagem para o intervalo [0, 255] e tipo uint8
     image_uint8 = (image * 255).astype(np.uint8)
 
@@ -35,7 +35,7 @@ def crop_breast_region(image):
     black_ratio = black_pixels / total_pixels
 
     # Verificar se a maior parte da imagem contém fundo preto
-    if black_ratio > 0.5:  # Ajuste este valor se necessário
+    if photometric_interpretation == "MONOCHROME2":  # Ajuste este valor se necessário
         image_uint8 = cv2.bitwise_not(image_uint8)
 
     # Aplica limiar para segmentação
@@ -72,7 +72,7 @@ def load_dcm_image(file_path, lol=0):
     img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)
 
     # Aplica o recorte da região de interesse
-    img_cropped = crop_breast_region(img)
+    img_cropped = crop_breast_region(img, dcm_data[0x28,0x04].value)
 
     # Aplica difusão anisotrópica e filtro mediano
     img_processed = anisotropic_diffusion_with_median_filter_gpu(img_cropped)
@@ -81,10 +81,8 @@ def load_dcm_image(file_path, lol=0):
     lower_bound = window_center - (window_width / 2)
     upper_bound = window_center + (window_width / 2)
     img_clipped = np.clip(img_processed, lower_bound, upper_bound)
-    img_normalized = (img_clipped - lower_bound) / (upper_bound - lower_bound + 1e-7)
-    img_resized = cv2.resize(img_normalized, (256, 256))
-    cv2.imwrite("pydicom.png", img_resized.flatten())
-    cv2.waitKey(0)
+    # img_normalized = (img_clipped - lower_bound) / (upper_bound - lower_bound + 1e-7)
+    img_resized = cv2.resize(img_clipped, (256, 256))
 
     if len(img_resized.shape) == 2:
         img_resized = np.expand_dims(img_resized, axis=-1)

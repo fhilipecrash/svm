@@ -27,7 +27,7 @@ def anisotropic_diffusion_with_median_filter_gpu(img, num_iter=5, kappa=50, gamm
     img_cpu = cv2.blur(img_cpu,(10,10))
     return img_cpu
 
-def crop_breast_region(img):
+def crop_breast_region(img, photometric_interpretation):
     # Converte a imagem para o intervalo [0, 255] e tipo uint8
     image_uint8 = (img * 255).astype(cp.uint8)
 
@@ -36,7 +36,7 @@ def crop_breast_region(img):
     black_ratio = black_pixels / total_pixels
 
     # Verificar se a maior parte da imagem contém fundo preto
-    if black_ratio > 0.5:  # Ajuste este valor se necessário
+    if photometric_interpretation == "MONOCHROME2":  # Ajuste este valor se necessário
         image_uint8 = cv2.bitwise_not(image_uint8)
 
     # Aplica limiar para segmentação
@@ -62,23 +62,29 @@ def crop_breast_region(img):
     cropped_image = img[start_y:end_y, start_x:end_x]
     return cropped_image
 
-def load_dcm_image(file_path):
-    print(file_path)
+def load_dcm_image(file_path, lol=0):
+    print(lol)
     dcm_data = pydicom.dcmread(file_path)
-    print(dcm_data)
-    img = dcm_data.pixel_array.astype(cp.float32)
-    img = (img - cp.min(img)) / (cp.max(img) - cp.min(img) + 1e-7)
+    img = dcm_data.pixel_array.astype(float)
+    img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)
 
     img = anisotropic_diffusion_with_median_filter_gpu(img)
-    img = cv2.resize(img, (800, 600))
-    img = crop_breast_region(img)
+    img = crop_breast_region(img, dcm_data[0x28,0x04].value)
+    img = cv2.resize(img, (500, 500))
 
     # if len(img.shape) == 2:
     #     img = np.expand_dims(img, axis=-1)
     # cv2.imshow("imwrite.png", img)
     # cv2.waitKey(0)
-    cv2.imwrite(f"img/{file_path.split('/')[1]}.png", (img * 255).astype('uint8'))
-    return img
+    window_center, window_width = 40, 80
+    lower_bound = window_center - (window_width / 2)
+    upper_bound = window_center + (window_width / 2)
+    img = np.clip(img, lower_bound, upper_bound)
+    # img = (img - lower_bound) / (upper_bound - lower_bound + 1e-7)
+    # cv2.imwrite(f"img/{file_path.split('/')[1]}.png", (img * 255).astype('uint8'))
+    if len(img.shape) == 2:
+        img = np.expand_dims(img, axis=-1)
+    return img.flatten()
 
 # load_dcm_image("training/B5_F4043F00.dcm")
 
@@ -101,10 +107,7 @@ if args.train is not None:
         sys.exit(1)
 
     labels = [0 if i % 2 == 0 else 1 for i in range(len(dicom_files))]
-    data = [load_dcm_image(file) for file in dicom_files]
-    print(data)
-    data = np.array(data)
-    print(data)
+    data = np.array([load_dcm_image(file, i) for i, file in enumerate(dicom_files)])
 
     if args.classifier == "svm":
         clf = SVC(kernel='linear')
