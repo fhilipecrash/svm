@@ -70,7 +70,7 @@ def load_dcm_image(file_path, lol=0):
 
     img = anisotropic_diffusion_with_median_filter_gpu(img)
     img = crop_breast_region(img, dcm_data[0x28,0x04].value)
-    img = cv2.resize(img, (500, 500))
+    img = cv2.resize(img, (256, 256))
 
     # if len(img.shape) == 2:
     #     img = np.expand_dims(img, axis=-1)
@@ -81,6 +81,7 @@ def load_dcm_image(file_path, lol=0):
     upper_bound = window_center + (window_width / 2)
     img = np.clip(img, lower_bound, upper_bound)
     # img = (img - lower_bound) / (upper_bound - lower_bound + 1e-7)
+    cv2.normalize(img, img, 0, 255, cv2.NORM_MINMAX)
     # cv2.imwrite(f"img/{file_path.split('/')[1]}.png", (img * 255).astype('uint8'))
     if len(img.shape) == 2:
         img = np.expand_dims(img, axis=-1)
