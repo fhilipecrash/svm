@@ -10,7 +10,9 @@ from glob import glob
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 from tensorflow.keras.utils import to_categorical
-from sklearn.model_selection import train_test_split
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.model_selection import train_test_split, KFold
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 # Funções existentes para pré-processamento de imagens
 def anisotropic_diffusion_with_median_filter_gpu(img, num_iter=5, kappa=50, gamma=0.1):
@@ -44,6 +46,7 @@ def crop_breast_region(img, photometric_interpretation):
     return cropped_image
 
 def load_dcm_image(file_path):
+    print(f"Carregando imagem DICOM: {file_path}")
     dcm_data = pydicom.dcmread(file_path)
     img = dcm_data.pixel_array.astype(float)
     img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)
@@ -76,33 +79,54 @@ if args.train:
     data = np.array([load_dcm_image(file) for file in dicom_files])
     labels = to_categorical(labels, num_classes=2)
 
-    # Divisão dos dados
-    X_train, X_val, y_train, y_val = train_test_split(data, labels, test_size=0.2, random_state=42)
+    # Configuração para validação cruzada
+    kfold = KFold(n_splits=5, shuffle=True, random_state=42)  # 5 folds
+    fold_no = 1
+    val_accuracies = []
 
-    # Definição do modelo CNN
-    model = Sequential([
-        Conv2D(32, (3, 3), activation='relu', input_shape=(256, 256, 1)),
-        MaxPooling2D((2, 2)),
-        Conv2D(64, (3, 3), activation='relu'),
-        MaxPooling2D((2, 2)),
-        Flatten(),
-        Dense(128, activation='relu'),
-        Dropout(0.5),
-        Dense(2, activation='softmax')
-    ])
+    for train_idx, val_idx in kfold.split(data):
+        print(f"\nTreinando Fold {fold_no}...")
+        X_train, X_val = data[train_idx], data[val_idx]
+        y_train, y_val = labels[train_idx], labels[val_idx]
 
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+        # Definição do modelo CNN
+        model = Sequential([
+            Conv2D(32, (3, 3), activation='relu', input_shape=(256, 256, 1)),
+            MaxPooling2D((2, 2)),
+            Conv2D(64, (3, 3), activation='relu'),
+            MaxPooling2D((2, 2)),
+            Flatten(),
+            Dense(128, activation='relu'),
+            Dropout(0.5),
+            Dense(2, activation='softmax')
+        ])
 
-    # Treinamento
-    model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=10, batch_size=16)
-    test_loss, test_acc = model.evaluate(X_train, y_train, verbose=2)
+        model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
-    print('\nTest accuracy:', test_acc)
-    print('\nTest loss:', test_loss)
+        # Early stopping para evitar overfitting
+        early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
 
-    # Salvar modelo
+        # Treinamento
+        history = model.fit(X_train, y_train, validation_data=(X_val, y_val),
+                            epochs=10, batch_size=16, callbacks=[early_stopping])
+
+        # Avaliação no conjunto de validação
+        val_loss, val_acc = model.evaluate(X_val, y_val, verbose=2)
+        val_accuracies.append(val_acc)
+        print(f"Fold {fold_no} - Acurácia na validação: {val_acc:.2%}")
+
+        fold_no += 1
+
+    # Média e desvio padrão da acurácia nos folds
+    avg_accuracy = np.mean(val_accuracies)
+    std_accuracy = np.std(val_accuracies)
+    print(f"\nAcurácia média nos 5 folds: {avg_accuracy:.2%} ± {std_accuracy:.2%}")
+
+    # Treinamento final com todos os dados
+    print("\nTreinando o modelo final com todos os dados...")
+    model.fit(data, labels, epochs=10, batch_size=16)
     model.save(model_file)
-    print(f"Modelo treinado e salvo como {model_file}")
+    print(f"Modelo final treinado e salvo como {model_file}")
 
 elif args.dcm:
     if not os.path.exists(model_file):
@@ -114,14 +138,33 @@ elif args.dcm:
     print(f"Modelo {model_file} carregado.")
 
     # Carregar e preprocessar a imagem DICOM
-    dcm_file = args.dcm
-    test_image = load_dcm_image(dcm_file)
-    test_image = np.expand_dims(test_image, axis=0)  # Adicionar dimensão do batch
+    dcm_files = args.dcm
+    test_dicom_files = glob(os.path.join(dcm_files, "*.dcm"))
+    if len(test_dicom_files) == 0:
+        print("Nenhum arquivo DICOM encontrado no diretório fornecido.")
+        sys.exit(1)
+    
+    test_data = np.array([load_dcm_image(file) for file in test_dicom_files])
+    test_labels = [0 if i % 2 == 0 else 1 for i in range(len(test_dicom_files))]
+
+    test_data = np.expand_dims(test_data, axis=-1)
 
     # Predição
-    prediction = model.predict(test_image)
-    class_idx = np.argmax(prediction)
-    print(f"Predição para {dcm_file}: Classe {class_idx} com probabilidade {prediction[0][class_idx]:.2f}")
+    prediction = model.predict(test_data)
+    # class_idx = np.argmax(prediction)
+    predicted_classes = np.argmax(prediction, axis=1)
+    # print(f"Predição para {dcm_file}: Classe {class_idx} com probabilidade {prediction[0][class_idx]:.2f}")
 
+    # Calcular acurácia
+    accuracy = accuracy_score(test_labels, predicted_classes)
+    print(f"Acurácia no conjunto de teste: {accuracy:.2%}")
+
+    # Relatório de classificação
+    print("\nRelatório de Classificação:")
+    print(classification_report(test_labels, predicted_classes))
+
+    # Matriz de Confusão
+    print("\nMatriz de Confusão:")
+    print(confusion_matrix(test_labels, predicted_classes))
 else:
     print("Forneça --train para treinar ou --dcm para classificar um arquivo DICOM.")
