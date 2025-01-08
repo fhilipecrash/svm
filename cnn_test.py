@@ -58,7 +58,7 @@ def load_dcm_image(file_path):
 parser = argparse.ArgumentParser(description='Classificação de mamografias com CNN.')
 parser.add_argument('--train', type=str, help='Diretório de DICOMs para treinamento.')
 parser.add_argument('--dcm', type=str, help='Arquivo DICOM para classificação.')
-parser.add_argument('--model', type=str, default='cnn_model.h5', help='Arquivo do modelo CNN.')
+parser.add_argument('--model', type=str, default='cnn_model.keras', help='Arquivo do modelo CNN.')
 args = parser.parse_args()
 
 # Caminho do modelo
@@ -95,6 +95,10 @@ if args.train:
 
     # Treinamento
     model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=10, batch_size=16)
+    test_loss, test_acc = model.evaluate(X_train, y_train, verbose=2)
+
+    print('\nTest accuracy:', test_acc)
+    print('\nTest loss:', test_loss)
 
     # Salvar modelo
     model.save(model_file)
