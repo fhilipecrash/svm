@@ -6,12 +6,15 @@ import numpy as np
 import joblib
 import sys
 import os
+import tensorflow as tf
 from glob import glob
 from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.callbacks import EarlyStopping
 from sklearn.model_selection import train_test_split, KFold
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 # Funções existentes para pré-processamento de imagens
@@ -57,6 +60,16 @@ def load_dcm_image(file_path):
         img = np.expand_dims(img, axis=-1)
     return img
 
+os.environ["CUPY_GPU_MEMORY_LIMIT"] = "1073741824"
+
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        print(e)
+
 # Parser para argumentos
 parser = argparse.ArgumentParser(description='Classificação de mamografias com CNN.')
 parser.add_argument('--train', type=str, help='Diretório de DICOMs para treinamento.')
@@ -80,7 +93,7 @@ if args.train:
     labels = to_categorical(labels, num_classes=2)
 
     # Configuração para validação cruzada
-    kfold = KFold(n_splits=5, shuffle=True, random_state=42)  # 5 folds
+    kfold = KFold(n_splits=10, shuffle=True, random_state=42)  # 5 folds
     fold_no = 1
     val_accuracies = []
 
@@ -88,6 +101,10 @@ if args.train:
         print(f"\nTreinando Fold {fold_no}...")
         X_train, X_val = data[train_idx], data[val_idx]
         y_train, y_val = labels[train_idx], labels[val_idx]
+
+        scaler = MinMaxScaler()
+        X_train = scaler.fit_transform(X_train.reshape(-1, 256 * 256)).reshape(X_train.shape)
+        X_val = scaler.transform(X_val.reshape(-1, 256 * 256)).reshape(X_val.shape)
 
         # Definição do modelo CNN
         model = Sequential([
@@ -106,9 +123,28 @@ if args.train:
         # Early stopping para evitar overfitting
         early_stopping = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
 
+        # Data augmentation
+        datagen = ImageDataGenerator(
+            rescale=1./255,
+            shear_range=0.2,
+            zoom_range=0.2,
+            horizontal_flip=True
+        )
+
+        # Gerar dados de treinamento
+        datagen.fit(X_train)
+        augmented_data = datagen.flow(X_train, y_train, batch_size=16)
+
         # Treinamento
-        history = model.fit(X_train, y_train, validation_data=(X_val, y_val),
-                            epochs=10, batch_size=16, callbacks=[early_stopping])
+        history = model.fit(
+            augmented_data,  # Gerador de dados
+            steps_per_epoch=max(1, len(X_train) // 16),  # Número de lotes por época
+            epochs=10,
+            validation_data=(X_val, y_val),  # Dados de validação
+            callbacks=[early_stopping]  # Early stopping
+        )
+        # history = model.fit(X_train, y_train, validation_data=(X_val, y_val),
+        #                     epochs=10, batch_size=16, callbacks=[early_stopping])
 
         # Avaliação no conjunto de validação
         val_loss, val_acc = model.evaluate(X_val, y_val, verbose=2)
@@ -125,6 +161,8 @@ if args.train:
     # Treinamento final com todos os dados
     print("\nTreinando o modelo final com todos os dados...")
     model.fit(data, labels, epochs=10, batch_size=16)
+    val_loss, val_acc = model.evaluate(data, labels, verbose=2)
+    print(f"Acurácia na validação final: {val_acc:.2%}")
     model.save(model_file)
     print(f"Modelo final treinado e salvo como {model_file}")
 
