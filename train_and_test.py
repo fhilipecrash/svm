@@ -5,7 +5,7 @@ import numpy as np
 import cv2
 from glob import glob
 from sklearn.model_selection import KFold
-from sklearn.metrics import classification_report, accuracy_score
+from sklearn.metrics import classification_report, accuracy_score, confusion_matrix, classification_report
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 from tensorflow.keras.utils import to_categorical
@@ -15,12 +15,13 @@ def build_model():
     model = Sequential([
         Conv2D(32, (3, 3), activation='relu', input_shape=(256, 256, 1)),
         MaxPooling2D((2, 2)),
+        Dropout(0.25),
         Conv2D(64, (3, 3), activation='relu'),
         MaxPooling2D((2, 2)),
         Flatten(),
         Dense(128, activation='relu'),
         Dropout(0.5),
-        Dense(2, activation='softmax')
+        Dense(6, activation='softmax')
     ])
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
     return model
@@ -33,7 +34,7 @@ def load_data(data_dir):
     labels = [0 if i % 2 == 0 else 1 for i in range(len(image_files))]
     images = [cv2.imread(file, cv2.IMREAD_GRAYSCALE) for file in image_files]
     images = np.array([img / 255.0 for img in images]).reshape(-1, 256, 256, 1)
-    labels = to_categorical(labels, num_classes=2)
+    labels = to_categorical(labels, num_classes=6)
     return images, labels
 
 def main():
@@ -49,7 +50,7 @@ def main():
 
         print("Carregando dados de treinamento...")
         images, labels = load_data(train_dir)
-        kfold = KFold(n_splits=10, shuffle=True, random_state=42)
+        kfold = KFold(n_splits=5, shuffle=True, random_state=42)
         accuracies = []
 
         for fold, (train_idx, val_idx) in enumerate(kfold.split(images)):
@@ -97,6 +98,12 @@ def main():
         y_true = np.argmax(test_labels, axis=1)
 
         accuracy = accuracy_score(y_true, y_pred)
+
+        print("Matriz de Confusão:")
+        print(confusion_matrix(y_true, y_pred))
+        print("\nRelatório de Classificação:")
+        print(classification_report(y_true, y_pred, labels=[0, 1, 2, 3, 4, 5], target_names=["BI-RADS 0", "BI-RADS 1", "BI-RADS 2", "BI-RADS 3", "BI-RADS 4", "BI-RADS 5"]))
+
         print(f"Acurácia nos dados de teste: {accuracy:.2%}")
         print("\nRelatório de classificação:")
         print(classification_report(y_true, y_pred))
