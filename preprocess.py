@@ -20,9 +20,7 @@ def anisotropic_diffusion_with_median_filter_gpu(img, num_iter=5, kappa=50, gamm
 
 def crop_breast_region(img, photometric_interpretation):
     image_uint8 = (img * 255).astype(cp.uint8)
-    if photometric_interpretation == "MONOCHROME2":
-        image_uint8 = cv2.bitwise_not(image_uint8)
-    _, binary_image = cv2.threshold(image_uint8, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    _, binary_image = cv2.threshold(image_uint8, 0, 255, cv2.THRESH_BINARY_INV if photometric_interpretation == "MONOCHROME2" else cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     largest_contour = max(contours, key=cv2.contourArea)
     x, y, w, h = cv2.boundingRect(largest_contour)
