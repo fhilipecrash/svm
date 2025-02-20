@@ -3,35 +3,41 @@ import os
 import sys
 import numpy as np
 import cv2
+import tensorflow as tf
 from glob import glob
-from sklearn.model_selection import KFold
-from sklearn.metrics import classification_report, accuracy_score, confusion_matrix, classification_report
+from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, GlobalAveragePooling2D, Dense, Dropout, Input
 from tensorflow.keras.utils import to_categorical
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 def build_model():
     model = Sequential([
-        Conv2D(32, (3, 3), activation='relu', input_shape=(256, 256, 1)),
+        Input((256, 256, 1)),
+        Conv2D(32, (3, 3), activation='relu'),
         MaxPooling2D((2, 2)),
         Dropout(0.25),
         Conv2D(64, (3, 3), activation='relu'),
         MaxPooling2D((2, 2)),
-        Flatten(),
+        GlobalAveragePooling2D(),
         Dense(128, activation='relu'),
         Dropout(0.5),
         Dense(6, activation='softmax')
     ])
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    print("Modelo CNN construído.")
     return model
+
+def create_dataset(images, labels, batch_size):
+    dataset = tf.data.Dataset.from_tensor_slices((images, labels))
+    dataset = dataset.shuffle(len(images)).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE)
+    return dataset
 
 def load_data(data_dir):
     image_files = glob(os.path.join(data_dir, "*.png"))
     if not image_files:
         print(f"Nenhuma imagem PNG encontrada no diretório: {data_dir}")
         sys.exit(1)
-    labels = [0 if i % 2 == 0 else 1 for i in range(len(image_files))]
+    labels = [int(file.split("/")[-1].split("_")[0].replace("B", "")) for file in image_files]
     images = [cv2.imread(file, cv2.IMREAD_GRAYSCALE) for file in image_files]
     images = np.array([img / 255.0 for img in images]).reshape(-1, 256, 256, 1)
     labels = to_categorical(labels, num_classes=6)
@@ -47,33 +53,19 @@ def main():
     if args.train:
         train_dir = args.train
         model_path = args.model
+        BATCH_SIZE = 16
 
         print("Carregando dados de treinamento...")
         images, labels = load_data(train_dir)
-        kfold = KFold(n_splits=5, shuffle=True, random_state=42)
-        accuracies = []
+        train_dataset = create_dataset(images, labels, BATCH_SIZE)
 
-        for fold, (train_idx, val_idx) in enumerate(kfold.split(images)):
-            print(f"Treinando Fold {fold + 1}...")
-            X_train, X_val = images[train_idx], images[val_idx]
-            y_train, y_val = labels[train_idx], labels[val_idx]
-
-            model = build_model()
-            datagen = ImageDataGenerator(rescale=1./255, shear_range=0.2, zoom_range=0.2, horizontal_flip=True)
-            datagen.fit(X_train)
-
-            model.fit(datagen.flow(X_train, y_train, batch_size=16),
-                      validation_data=(X_val, y_val),
-                      epochs=10, verbose=2)
-
-            val_loss, val_acc = model.evaluate(X_val, y_val, verbose=2)
-            accuracies.append(val_acc)
-            print(f"Fold {fold + 1} - Acurácia na validação: {val_acc:.2%}")
-
-        print(f"Acurácia média nos folds: {np.mean(accuracies):.2%}")
-        model.fit(images, labels, epochs=10, batch_size=16, verbose=2)
-        val_loss, val_acc = model.evaluate(images, labels, verbose=2)
-        print(f"Acurácia na validação final: {val_acc:.2%}")
+        model = build_model()
+        
+        model.fit(train_dataset, epochs=10, verbose=2)
+        
+        val_loss, val_acc = model.evaluate(train_dataset, verbose=2)
+        print(f"Acurácia na validação: {val_acc:.2%}")
+        
         model.save(model_path)
         print(f"Modelo salvo em: {model_path}")
 
@@ -105,8 +97,6 @@ def main():
         print(classification_report(y_true, y_pred, labels=[0, 1, 2, 3, 4, 5], target_names=["BI-RADS 0", "BI-RADS 1", "BI-RADS 2", "BI-RADS 3", "BI-RADS 4", "BI-RADS 5"]))
 
         print(f"Acurácia nos dados de teste: {accuracy:.2%}")
-        print("\nRelatório de classificação:")
-        print(classification_report(y_true, y_pred))
 
     else:
         print("Use --train para treinamento ou --dcm para teste.")
@@ -114,4 +104,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
