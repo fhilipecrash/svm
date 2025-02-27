@@ -9,17 +9,23 @@ from sklearn.metrics import classification_report, accuracy_score, confusion_mat
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Conv2D, MaxPooling2D, GlobalAveragePooling2D, Dense, Dropout, Input
 from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.regularizers import l2
 
 def build_model():
     model = Sequential([
-        Input((256, 256, 1)),
-        Conv2D(32, (3, 3), activation='relu'),
+        Input((512, 512, 1)),
+        Conv2D(32, (3, 3), activation='relu', kernel_regularizer=l2(0.01)),
         MaxPooling2D((2, 2)),
         Dropout(0.25),
-        Conv2D(64, (3, 3), activation='relu'),
+        Conv2D(64, (3, 3), activation='relu', kernel_regularizer=l2(0.01)),
         MaxPooling2D((2, 2)),
         GlobalAveragePooling2D(),
-        Dense(128, activation='relu'),
+        Dense(128, activation='relu', kernel_regularizer=l2(0.01)),
+        Dropout(0.5),
+        Dense(256, activation='relu', kernel_regularizer=l2(0.01)),
+        Dropout(0.5),
+        Dense(512, activation='relu', kernel_regularizer=l2(0.01)),
         Dropout(0.5),
         Dense(6, activation='softmax')
     ])
@@ -39,7 +45,7 @@ def load_data(data_dir):
         sys.exit(1)
     labels = [int(file.split("/")[-1].split("_")[0].replace("B", "")) for file in image_files]
     images = [cv2.imread(file, cv2.IMREAD_GRAYSCALE) for file in image_files]
-    images = np.array([img / 255.0 for img in images]).reshape(-1, 256, 256, 1)
+    images = np.array([img / 255.0 for img in images]).reshape(-1, 512, 512, 1)
     labels = to_categorical(labels, num_classes=6)
     return images, labels
 
@@ -61,7 +67,10 @@ def main():
 
         model = build_model()
         
-        model.fit(train_dataset, epochs=10, verbose=2)
+        early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+        reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.0001)
+        
+        model.fit(train_dataset, epochs=50, verbose=2, callbacks=[early_stopping, reduce_lr])
         
         val_loss, val_acc = model.evaluate(train_dataset, verbose=2)
         print(f"Acurácia na validação: {val_acc:.2%}")
