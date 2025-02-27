@@ -53,7 +53,7 @@ def load_dcm_image(file_path):
     img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)
     img = normalize_image(img)
     img = crop_breast_region(img, dcm_data[0x28, 0x04].value)
-    img = cv2.resize(img, (256, 256))
+    img = cv2.resize(img, (512, 512))
     return (img * 255).astype(np.uint8)
 
 def main():
