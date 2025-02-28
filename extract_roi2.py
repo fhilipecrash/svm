@@ -2,7 +2,8 @@ import cv2
 import numpy as np
 
 # Carregar a imagem
-image_path = "img/B5_24380912.png"
+# image_path = "img/B4_D38187FE.png"
+image_path = "img/B5_7C97E76F.png"
 image = cv2.imread(image_path)
 
 # Converter para escala de cinza
@@ -13,14 +14,14 @@ blurred = cv2.GaussianBlur(gray, (9, 9), 2)
 
 # Detectar círculos usando a Transformada de Hough
 circles = cv2.HoughCircles(
-    blurred,
-    cv2.HOUGH_GRADIENT,
-    dp=1.2,
-    minDist=10,
-    param1=50,
-    param2=30,
-    minRadius=30,
-    maxRadius=120
+    blurred, 
+    cv2.HOUGH_GRADIENT, 
+    dp=1.6, 
+    minDist=50, 
+    param1=50, 
+    param2=30, 
+    minRadius=30, 
+    maxRadius=150
 )
 
 # Verifica se algum círculo foi detectado
