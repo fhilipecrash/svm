@@ -49,16 +49,18 @@ def load_data(data_dir):
     labels = to_categorical(labels, num_classes=6)
     return images, labels
 
-def main():
+def main(train=None, dcm=None):
     parser = argparse.ArgumentParser(description="Treinar e testar modelo CNN.")
     parser.add_argument("--train", type=str, help="Diretório contendo imagens PNG para treinamento.")
     parser.add_argument("--dcm", type=str, help="Diretório contendo imagens PNG para teste.")
     parser.add_argument("--model", type=str, default="cnn_model.keras", help="Arquivo do modelo CNN.")
     args = parser.parse_args()
 
-    if args.train:
-        train_dir = args.train
-        model_path = args.model
+    train_dir = train if train is not None else args.train
+    dcm_dir = dcm if dcm is not None else args.dcm
+    model_path = args.model
+
+    if train_dir:
         BATCH_SIZE = 16
 
         print("Carregando dados de treinamento...")
@@ -78,10 +80,7 @@ def main():
         model.save(model_path)
         print(f"Modelo salvo em: {model_path}")
 
-    elif args.dcm:
-        test_dir = args.dcm
-        model_path = args.model
-
+    elif dcm_dir:
         if not os.path.exists(model_path):
             print(f"Modelo {model_path} não encontrado. Treine o modelo primeiro usando --train.")
             sys.exit(1)
@@ -91,7 +90,7 @@ def main():
         print(f"Modelo {model_path} carregado.")
 
         print("Carregando dados de teste...")
-        test_images, test_labels = load_data(test_dir)
+        test_images, test_labels = load_data(dcm_dir)
 
         print("Avaliando o modelo nos dados de teste...")
         predictions = model.predict(test_images, verbose=2)

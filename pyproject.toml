@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "tensorflow-test"
+name = "mammography-classifier"
 version = "0.1.0"
 description = ""
 authors = ["Fhilipe Coelho <fhilipecoelho.dev@gmail.com>"]
@@ -21,6 +21,7 @@ tensorflow = { extras = ["and-cuda"], version = "^2.18.0" }
 pyqt6 = "^6.8.0"
 tk = "^0.1.0"
 cupy-cuda12x = "^13.3.0"
+fastapi = {extras = ["standard"], version = "^0.115.11"}
 
 [build-system]
 requires = ["poetry-core"]
