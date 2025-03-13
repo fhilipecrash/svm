@@ -1,1 +1,1 @@
-from .train_and_test import main
+from .preprocess import main as preprocess

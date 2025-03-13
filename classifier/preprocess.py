@@ -4,6 +4,8 @@ import cv2
 import numpy as np
 import os
 from glob import glob
+from pydicom.uid import generate_uid
+from zipfile import ZipFile
 
 def truncation_normalization(img):
     """
@@ -43,7 +45,7 @@ def crop_breast_region(img, photometric_interpretation):
     
     largest_contour = max(contours, key=cv2.contourArea)
     x, y, w, h = cv2.boundingRect(largest_contour)
-    return img[y:y+h, x:x+w]
+    return img[y:y+h, x:x+w], (x, y, w, h)
 
 def segment_masses(img):
     """
@@ -98,6 +100,51 @@ def draw_bbox(img, bbox):
         cv2.rectangle(img, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)  # Cor: verde, Espessura: 2
     return img
 
+def generate_srs(coordinates):
+    """
+    Gera uma SR (Structured Reporting) para uma imagem DICOM.
+    """
+    x, y, w, h = coordinates
+    print("Gerando SR...")
+    print(x, y, w, h)
+    ds = pydicom.Dataset()
+
+    # Set required DICOM attributes
+    ds.SOPClassUID = "1.2.840.10008.5.1.4.1.1.88.11"  # SOP Class UID for SR
+    ds.SOPInstanceUID = generate_uid()  # Generate a unique UID for the SR
+    ds.Modality = "SR"  # Modality is Structured Report
+    ds.is_implicit_VR = False
+    ds.is_little_endian = True
+
+    # Add patient and study information (example data)
+    ds.PatientName = "Doe^John"
+    ds.PatientID = "123456"
+    ds.StudyInstanceUID = generate_uid()
+    ds.SeriesInstanceUID = generate_uid()
+
+    # Step 4: Map the OpenCV bounding box to DICOM SR
+    # Create a GraphicAnnotationSequence for the bounding box
+    graphic_annotation = pydicom.Dataset()
+    graphic_annotation.GraphicAnnotationSequence = pydicom.Sequence()
+
+    # Define the bounding box as a rectangle in DICOM SR
+    bounding_box = pydicom.Dataset()
+    bounding_box.GraphicType = "RECTANGLE"  # Type of graphic (rectangle)
+    bounding_box.GraphicData = [x, y, x + w, y, x + w, y + h, x, y + h, x, y]  # Rectangle coordinates
+    bounding_box.GraphicAnnotationUnits = "PIXEL"  # Units for the coordinates
+
+    # Add the bounding box to the GraphicAnnotationSequence
+    graphic_annotation.GraphicAnnotationSequence.append(bounding_box)
+
+    # Add the GraphicAnnotationSequence to the SR ContentSequence
+    ds.ContentSequence = pydicom.Sequence([graphic_annotation])
+
+    # Step 5: Save the DICOM SR file
+    output_sr_path = "output_sr.dcm"
+    ds.save_as(output_sr_path)
+
+    print(f"DICOM SR saved successfully at {output_sr_path}")
+
 def load_dcm_image(file_path):
     print(f"Processando imagem DICOM: {file_path}")
     dcm_data = pydicom.dcmread(file_path)
@@ -107,8 +154,10 @@ def load_dcm_image(file_path):
     img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)
     
     # Recorte da região da mama
-    img_cropped = crop_breast_region(img, dcm_data[0x28, 0x04].value)
+    img_cropped, coordinates = crop_breast_region(img, dcm_data.PhotometricInterpretation)
     
+    # generate_srs(coordinates)
+
     # Normalização por percentis após o recorte
     img_normalized = truncation_normalization(img_cropped)
     
@@ -129,46 +178,54 @@ def load_dcm_image(file_path):
     # Segmentação das massas
     mass_mask = segment_masses(img_final[:, :, 0])  # Usar apenas o primeiro canal (grayscale)
     
-    return img_final.astype(np.uint8), mass_mask
+    return dcm_data, img_final, mass_mask
 
-def main():
-    parser = argparse.ArgumentParser(description="Pré-processar imagens DICOM e salvá-las em PNG.")
-    parser.add_argument("--input_dir", type=str, required=True, help="Diretório contendo arquivos DICOM.")
-    parser.add_argument("--output_dir", type=str, required=True, help="Diretório para salvar as imagens processadas.")
-    parser.add_argument("--mask_dir", type=str, required=True, help="Diretório para salvar as máscaras das massas.")
-    parser.add_argument("--bbox_dir", type=str, required=True, help="Diretório para salvar as imagens com bounding boxes.")
-    args = parser.parse_args()
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    os.makedirs(args.mask_dir, exist_ok=True)
-    os.makedirs(args.bbox_dir, exist_ok=True)
+def main(input_file=None):
+    input_dir = "zip/"
+
+    os.makedirs("output/", exist_ok=True)
+    os.makedirs(input_dir, exist_ok=True)
+
+    with ZipFile(input_file, 'r') as zip_ref:
+        zip_ref.extractall(path=input_dir)
     
-    for file_path in glob(os.path.join(args.input_dir, "*.dcm")):
+    output_paths = []
+
+    for file_path in glob(os.path.join(input_dir, "*.dcm")):
         try:
-            img, mass_mask = load_dcm_image(file_path)
-            
-            # Salvar a imagem processada
-            output_path = os.path.join(args.output_dir, os.path.basename(file_path).replace(".dcm", ".png"))
-            cv2.imwrite(output_path, img)
-            print(f"Imagem salva em: {output_path}")
-            
-            # Salvar a máscara das massas
-            mask_path = os.path.join(args.mask_dir, os.path.basename(file_path).replace(".dcm", "_mask.png"))
-            cv2.imwrite(mask_path, mass_mask)
-            print(f"Máscara salva em: {mask_path}")
+            dcm_data, img_final, mass_mask = load_dcm_image(file_path)
             
             # Extrair a bounding box da maior massa
             bbox = mask_to_bbox(mass_mask)
             
             # Desenhar a bounding box na imagem
-            img_with_bbox = draw_bbox(img.copy(), bbox)
+            img_with_bbox = draw_bbox(img_final.copy(), bbox)
             
-            # Salvar a imagem com a bounding box
-            bbox_path = os.path.join(args.bbox_dir, os.path.basename(file_path).replace(".dcm", "_bbox.png"))
-            cv2.imwrite(bbox_path, img_with_bbox)
-            print(f"Imagem com bounding box salva em: {bbox_path}")
+            # Atualizar o PixelData do dataset DICOM com a imagem que contém a bounding box
+            dcm_data.PixelData = img_with_bbox.tobytes()
+            dcm_data.SOPInstanceUID = generate_uid()
+            dcm_data.ImageComments= "Teste"
+            dcm_data.SamplesPerPixel = 3  # Para RGB, 3 canais
+            dcm_data.PhotometricInterpretation = "RGB"  # Especificando que a imagem é colorida
+            dcm_data.BitsAllocated = 8  # Cada canal de cor usa 8 bits
+            dcm_data.BitsStored = 8
+            dcm_data.HighBit = 7  # O bit mais alto (para 8 bits)
+            dcm_data.PixelRepresentation = 0  # Representação de valor positivo para cada canal
+            dcm_data.WindowCenter = 128
+            dcm_data.WindowWidth = 256
+            dcm_data.Rows, dcm_data.Columns = img_with_bbox.shape[:2]
+            
+            # Salvar o dataset DICOM modificado
+            output_path = os.path.join("output/", os.path.basename(file_path))
+            dcm_data.save_as(output_path)
+            print(f"Dataset DICOM com bounding box salvo em: {output_path}")
+            output_paths.append(output_path)
         except Exception as e:
             print(f"Erro ao processar {file_path}: {str(e)}")
+
+    print(output_paths)
+    return output_paths
 
 if __name__ == "__main__":
     main()

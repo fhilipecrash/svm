@@ -11,7 +11,7 @@ python = ">=3.10,<=3.13"
 matplotlib = "^3.9.2"
 scikit-learn = "^1.5.2"
 joblib = "^1.4.2"
-pydicom = "^3.0.1"
+pydicom = "^2.4.2"
 scikit-image = "^0.24.0"
 opencv-python = "^4.10.0.84"
 opencv-cuda = "^0.0.2"
@@ -21,7 +21,9 @@ tensorflow = { extras = ["and-cuda"], version = "^2.18.0" }
 pyqt6 = "^6.8.0"
 tk = "^0.1.0"
 cupy-cuda12x = "^13.3.0"
-fastapi = {extras = ["standard"], version = "^0.115.11"}
+fastapi = { extras = ["standard"], version = "^0.115.11" }
+sqlmodel = "^0.0.24"
+pynetdicom = "^2.1.1"
 
 [build-system]
 requires = ["poetry-core"]
