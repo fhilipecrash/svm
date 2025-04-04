@@ -62,6 +62,8 @@ def send_dicom(file_paths, session):
                 session.commit()
             else:
                 raise Exception(f"Falha ao enviar o arquivo DICOM: {status}")
+    else:
+        raise Exception("Falha ao estabelecer conexão DICOM")
     assoc.release()
 
 @app.get("/")

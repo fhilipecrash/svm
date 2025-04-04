@@ -100,7 +100,7 @@ def draw_bbox(img, bbox):
         cv2.rectangle(img, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)  # Cor: verde, Espessura: 2
     return img
 
-def generate_srs(coordinates):
+def generate_srs(coordinates, dcm_data):
     """
     Gera uma SR (Structured Reporting) para uma imagem DICOM.
     """
@@ -110,7 +110,7 @@ def generate_srs(coordinates):
     ds = pydicom.Dataset()
 
     # Set required DICOM attributes
-    ds.SOPClassUID = "1.2.840.10008.5.1.4.1.1.88.11"  # SOP Class UID for SR
+    ds.SOPClassUID = generate_uid()  # SOP Class UID for SR
     ds.SOPInstanceUID = generate_uid()  # Generate a unique UID for the SR
     ds.Modality = "SR"  # Modality is Structured Report
     ds.is_implicit_VR = False
@@ -119,8 +119,21 @@ def generate_srs(coordinates):
     # Add patient and study information (example data)
     ds.PatientName = "Doe^John"
     ds.PatientID = "123456"
-    ds.StudyInstanceUID = generate_uid()
+    ds.StudyInstanceUID = dcm_data.StudyInstanceUID
     ds.SeriesInstanceUID = generate_uid()
+
+    # Step 3: Create the SR ContentSequence
+    # acquisition_name = pydicom.Dataset()
+    # referenced_sop = pydicom.Dataset()
+    # referenced_sop.ReferencedSOPClassUID = generate_uid() # SOP Class UID for SR
+    print(dcm_data)
+    print(dcm_data.SOPInstanceUID)
+    # referenced_sop.ReferencedSOPInstanceUID = dcm_data.SOPInstanceUID  # Reference the SR itself
+    # ds.SOPInstanceUID = dcm_data.SOPInstanceUID
+    ds.ReferencedSOPInstanceUID = dcm_data.SOPInstanceUID
+    ds.ReferencedSOPClassUID = dcm_data.SOPClassUID
+    # acquisition_name.ReferencedSOPSequence = pydicom.Sequence([referenced_sop])
+    # ds.AcquisitionContextSequence = pydicom.Sequence([acquisition_name])
 
     # Step 4: Map the OpenCV bounding box to DICOM SR
     # Create a GraphicAnnotationSequence for the bounding box
@@ -156,7 +169,7 @@ def load_dcm_image(file_path):
     # Recorte da região da mama
     img_cropped, coordinates = crop_breast_region(img, dcm_data.PhotometricInterpretation)
     
-    # generate_srs(coordinates)
+    generate_srs(coordinates, dcm_data)
 
     # Normalização por percentis após o recorte
     img_normalized = truncation_normalization(img_cropped)
