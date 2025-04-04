@@ -50,9 +50,9 @@ def create_zip_from_output(output_folder, zip_filename):
                 zipf.write(file_path, arcname)
 
 def send_dicom(file_paths, session):
-    ae = AE(ae_title="DICOM")
+    ae = AE(ae_title="HIGIANULOCAL")
     ae.requested_contexts = StoragePresentationContexts
-    assoc = ae.associate("10.0.3.2", 11112, ae_title="TESTANDO")
+    assoc = ae.associate("10.0.3.32", 11112, ae_title="HIGIANULOCAL")
     if assoc.is_established:
         for file_path in file_paths:
             dataset = dcmread(file_path)
@@ -94,10 +94,10 @@ async def read_item(session: SessionDep, q: Union[str, None] = None):
         # session.add(History(filename=filename, message="Arquivo processado com sucesso!", success=True))
         # session.commit()
         send_dicom(edited_image_paths, session)
-        os.remove(filename)
+        # os.remove(filename)
         create_zip_from_output("output", filename)
-        shutil.rmtree("zip")
-        shutil.rmtree("output")
+        # shutil.rmtree("zip")
+        # shutil.rmtree("output")
         return JSONResponse(
             content={
                 "filename": filename,

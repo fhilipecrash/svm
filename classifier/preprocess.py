@@ -4,7 +4,8 @@ import cv2
 import numpy as np
 import os
 from glob import glob
-from pydicom.uid import generate_uid
+from pydicom.uid import generate_uid, ExplicitVRLittleEndian
+from pydicom.dataset import Dataset, FileMetaDataset
 from zipfile import ZipFile
 
 def truncation_normalization(img):
@@ -106,28 +107,34 @@ def generate_srs(coordinates, dcm_data):
     """
     x, y, w, h = coordinates
     print("Gerando SR...")
-    print(x, y, w, h)
-    ds = pydicom.Dataset()
+    ds = Dataset()
+    # meta = FileMetaDataset()
 
+    sop_class_uid = '1.2.840.10008.5.1.4.1.1.88.11'
+    sop_instance_uid = generate_uid()
     # Set required DICOM attributes
-    ds.SOPClassUID = generate_uid()  # SOP Class UID for SR
-    ds.SOPInstanceUID = generate_uid()  # Generate a unique UID for the SR
+    ds.file_meta = Dataset()
+    ds.file_meta.FileMetaInformationGroupLength = 192
+    ds.file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    ds.file_meta.FileMetaInformationVersion = b"\x00\x01"
+    ds.file_meta.MediaStorageSOPClassUID = sop_class_uid
+    ds.file_meta.MediaStorageSOPInstanceUID = dcm_data.SOPInstanceUID
+    ds.SOPClassUID = sop_class_uid # SOP Class UID for SR
+    ds.SOPInstanceUID = sop_instance_uid  # Generate a unique UID for the SR
     ds.Modality = "SR"  # Modality is Structured Report
     ds.is_implicit_VR = False
     ds.is_little_endian = True
 
     # Add patient and study information (example data)
-    ds.PatientName = "Doe^John"
-    ds.PatientID = "123456"
+    ds.PatientName = dcm_data.PatientName
+    ds.PatientID = dcm_data.PatientID
     ds.StudyInstanceUID = dcm_data.StudyInstanceUID
     ds.SeriesInstanceUID = generate_uid()
 
     # Step 3: Create the SR ContentSequence
-    # acquisition_name = pydicom.Dataset()
-    # referenced_sop = pydicom.Dataset()
+    # acquisition_name = Dataset()
+    # referenced_sop = Dataset()
     # referenced_sop.ReferencedSOPClassUID = generate_uid() # SOP Class UID for SR
-    print(dcm_data)
-    print(dcm_data.SOPInstanceUID)
     # referenced_sop.ReferencedSOPInstanceUID = dcm_data.SOPInstanceUID  # Reference the SR itself
     # ds.SOPInstanceUID = dcm_data.SOPInstanceUID
     ds.ReferencedSOPInstanceUID = dcm_data.SOPInstanceUID
@@ -137,11 +144,11 @@ def generate_srs(coordinates, dcm_data):
 
     # Step 4: Map the OpenCV bounding box to DICOM SR
     # Create a GraphicAnnotationSequence for the bounding box
-    graphic_annotation = pydicom.Dataset()
+    graphic_annotation = Dataset()
     graphic_annotation.GraphicAnnotationSequence = pydicom.Sequence()
 
     # Define the bounding box as a rectangle in DICOM SR
-    bounding_box = pydicom.Dataset()
+    bounding_box = Dataset()
     bounding_box.GraphicType = "RECTANGLE"  # Type of graphic (rectangle)
     bounding_box.GraphicData = [x, y, x + w, y, x + w, y + h, x, y + h, x, y]  # Rectangle coordinates
     bounding_box.GraphicAnnotationUnits = "PIXEL"  # Units for the coordinates
@@ -153,10 +160,11 @@ def generate_srs(coordinates, dcm_data):
     ds.ContentSequence = pydicom.Sequence([graphic_annotation])
 
     # Step 5: Save the DICOM SR file
-    output_sr_path = "output_sr.dcm"
-    ds.save_as(output_sr_path)
+    return ds
+    # output_sr_path = "output_sr.dcm"
+    # ds.save_as(output_sr_path)
 
-    print(f"DICOM SR saved successfully at {output_sr_path}")
+    # print(f"DICOM SR saved successfully at {output_sr_path}")
 
 def load_dcm_image(file_path):
     print(f"Processando imagem DICOM: {file_path}")
@@ -168,8 +176,6 @@ def load_dcm_image(file_path):
     
     # Recorte da região da mama
     img_cropped, coordinates = crop_breast_region(img, dcm_data.PhotometricInterpretation)
-    
-    generate_srs(coordinates, dcm_data)
 
     # Normalização por percentis após o recorte
     img_normalized = truncation_normalization(img_cropped)
@@ -191,7 +197,7 @@ def load_dcm_image(file_path):
     # Segmentação das massas
     mass_mask = segment_masses(img_final[:, :, 0])  # Usar apenas o primeiro canal (grayscale)
     
-    return dcm_data, img_final, mass_mask
+    return dcm_data, img_final, mass_mask, coordinates
 
 
 def main(input_file=None):
@@ -207,7 +213,7 @@ def main(input_file=None):
 
     for file_path in glob(os.path.join(input_dir, "*.dcm")):
         try:
-            dcm_data, img_final, mass_mask = load_dcm_image(file_path)
+            dcm_data, img_final, mass_mask, coordinates = load_dcm_image(file_path)
             
             # Extrair a bounding box da maior massa
             bbox = mask_to_bbox(mass_mask)
@@ -231,13 +237,14 @@ def main(input_file=None):
             
             # Salvar o dataset DICOM modificado
             output_path = os.path.join("output/", os.path.basename(file_path))
-            dcm_data.save_as(output_path)
+            # dcm_data.save_as(output_path)
+            ds = generate_srs(coordinates, dcm_data)
+            ds.save_as(output_path)
             print(f"Dataset DICOM com bounding box salvo em: {output_path}")
             output_paths.append(output_path)
         except Exception as e:
             print(f"Erro ao processar {file_path}: {str(e)}")
 
-    print(output_paths)
     return output_paths
 
 if __name__ == "__main__":
