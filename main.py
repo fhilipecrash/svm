@@ -55,7 +55,7 @@ def send_dicom(file_paths, session):
     assoc = ae.associate("10.0.3.32", 11112, ae_title="HIGIANULOCAL")
     if assoc.is_established:
         for file_path in file_paths:
-            dataset = dcmread(file_path)
+            dataset = dcmread(file_path, force=True)
             status = assoc.send_c_store(dataset)
             if status and status.Status == 0x0000:
                 session.add(History(filename=file_path, message="Arquivo DICOM enviado com sucesso", success=True))
@@ -65,6 +65,11 @@ def send_dicom(file_paths, session):
     else:
         raise Exception("Falha ao estabelecer conexão DICOM")
     assoc.release()
+
+@app.get("/send-dicom")
+async def send_dicom_route(session: SessionDep):
+    send_dicom(['sr_example.dcm'], session)
+    return {"message": "Arquivos DICOM enviados com sucesso"}
 
 @app.get("/")
 async def read_item(session: SessionDep, q: Union[str, None] = None):

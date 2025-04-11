@@ -6,3 +6,6 @@ svm_sklearn.png
 *.dcm
 *.png
 *.keras
+*.zip
+*.pyc
+*.db
