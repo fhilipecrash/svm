@@ -368,19 +368,19 @@ def generate_srs(coordinates, dcm_data):
     measurement_group.ContentSequence.append(tracking_uid)
     
     # ROI Graphic Data
-    graphic_item = Dataset()
-    graphic_item.RelationshipType = 'CONTAINS'
-    graphic_item.ValueType = 'SCOORD'
+    graphic_object = Dataset()
+    graphic_object.RelationshipType = 'CONTAINS'
+    graphic_object.ValueType = 'SCOORD'
     
     # Graphic Data for Rectangle (x1, y1, x2, y2, x3, y3, x4, y4, x1, y1)
-    graphic_item.GraphicData = [
+    graphic_object.GraphicData = [
         x, y,          # Top-left
         x + w, y,      # Top-right
         x + w, y + h,  # Bottom-right
         x, y + h,      # Bottom-left
         x, y           # Back to top-left to close
     ]
-    graphic_item.GraphicType = 'POLYGON'
+    graphic_object.GraphicType = 'POLYLINE'
     
     # Referenced Image for Graphic
     ref_graphic = Dataset()
@@ -392,9 +392,12 @@ def generate_srs(coordinates, dcm_data):
     ref_sop_graphic.ReferencedSOPInstanceUID = dcm_data.SOPInstanceUID
     ref_graphic.ReferencedSOPSequence = pydicom.Sequence([ref_sop_graphic])
     
-    graphic_item.ContentSequence = pydicom.Sequence([ref_graphic])
-    measurement_group.ContentSequence.append(graphic_item)
+    graphic_object.ContentSequence = pydicom.Sequence([ref_graphic])
+
+    graphic_annotation = Dataset()
+    graphic_annotation.GraphicObjectSequence = pydicom.Sequence([graphic_object])
     
+    measurements.GraphicAnnotationSequence = pydicom.Sequence([graphic_annotation])
     measurements.ContentSequence = pydicom.Sequence([measurement_group])
     content_seq.append(measurements)
     

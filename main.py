@@ -55,6 +55,7 @@ def send_dicom(file_paths, session):
     assoc = ae.associate("10.0.3.32", 11112, ae_title="HIGIANULOCAL")
     if assoc.is_established:
         for file_path in file_paths:
+            print(file_path)
             dataset = dcmread(file_path, force=True)
             status = assoc.send_c_store(dataset)
             if status and status.Status == 0x0000:
