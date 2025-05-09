@@ -51,24 +51,15 @@ def segment_masses(img):
     @img : numpy array image (0-255 range, uint8)
     return: máscara binária das massas
     """
-    # Aplicar um filtro Gaussiano para suavizar a imagem
-    blurred = cv2.GaussianBlur(img, (5, 5), 0)
-    
-    # Detecção de bordas usando Canny
+    # blurred = cv2.GaussianBlur(img, (5, 5), 0)
+    blurred = cv2.bilateralFilter(img, 5, 90, 75)
     edges = cv2.Canny(blurred, 60, 70)
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     
-    # Encontrar contornos
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE) # Considerar trocar o CHAIN_APPROX_SIMPLE
-    
-    # Criar uma máscara vazia
     mask = np.zeros_like(img)
-    
-    # Desenhar os contornos na máscara
     for contour in contours:
-        # Filtrar contornos pequenos (ruído)
-        if cv2.contourArea(contour) > 100:  # Ajuste o valor conforme necessário
+        if cv2.contourArea(contour) > 100:
             cv2.drawContours(mask, [contour], -1, 255, thickness=cv2.FILLED)
-    
     return mask
 
 def mask_to_bbox(mask):
@@ -81,10 +72,9 @@ def mask_to_bbox(mask):
     if not contours:
         return None
     
-    # Encontrar o contorno com a maior área
     largest_contour = max(contours, key=cv2.contourArea)
     x, y, w, h = cv2.boundingRect(largest_contour)
-    return [x, y, x + w, y + h]  # [x_min, y_min, x_max, y_max]
+    return [x, y, x + w, y + h]
 
 def draw_bbox(img, bbox):
     """
@@ -95,7 +85,7 @@ def draw_bbox(img, bbox):
     """
     if bbox is not None:
         x_min, y_min, x_max, y_max = bbox
-        cv2.rectangle(img, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)  # Cor: verde, Espessura: 2
+        cv2.rectangle(img, (x_min, y_min), (x_max, y_max), (0, 255, 0), 2)
     return img
 
 def load_dcm_image(file_path):
@@ -103,70 +93,55 @@ def load_dcm_image(file_path):
     dcm_data = pydicom.dcmread(file_path)
     img = dcm_data.pixel_array.astype(float)
     
-    # Normalização básica para 0-1
     img = (img - np.min(img)) / (np.max(img) - np.min(img) + 1e-7)
-    
-    # Recorte da região da mama
     img_cropped = crop_breast_region(img, dcm_data[0x28, 0x04].value)
-    
-    # Normalização por percentis após o recorte
     img_normalized = truncation_normalization(img_cropped)
     
-    # Aplicação do CLAHE
     cl1 = clahe(img_normalized, 1.0)
     cl2 = clahe(img_normalized, 2.0)
     
-    # Combinação dos canais
     img_final = cv2.merge((
         np.array(img_normalized * 255, dtype=np.uint8),
         cl1,
         cl2
     ))
     
-    # Redimensionamento final
     img_final = cv2.resize(img_final, (512, 512))
-    
-    # Segmentação das massas
-    mass_mask = segment_masses(img_final[:, :, 0])  # Usar apenas o primeiro canal (grayscale)
+    mass_mask = segment_masses(img_final[:, :, 0])
     
     return img_final.astype(np.uint8), mass_mask
 
 def main():
-    parser = argparse.ArgumentParser(description="Pré-processar imagens DICOM e salvá-las em PNG.")
+    parser = argparse.ArgumentParser(description="Pré-processar imagens DICOM e salvar ROIs das massas.")
     parser.add_argument("--input_dir", type=str, required=True, help="Diretório contendo arquivos DICOM.")
-    parser.add_argument("--output_dir", type=str, required=True, help="Diretório para salvar as imagens processadas.")
-    # parser.add_argument("--mask_dir", type=str, required=True, help="Diretório para salvar as máscaras das massas.")
+    parser.add_argument("--output_dir", type=str, required=True, help="Diretório para salvar as ROIs das massas.")
     parser.add_argument("--bbox_dir", type=str, required=True, help="Diretório para salvar as imagens com bounding boxes.")
     args = parser.parse_args()
 
     os.makedirs(args.output_dir, exist_ok=True)
-    # os.makedirs(args.mask_dir, exist_ok=True)
     os.makedirs(args.bbox_dir, exist_ok=True)
     
     for file_path in glob(os.path.join(args.input_dir, "*.dcm")):
         try:
             img, mass_mask = load_dcm_image(file_path)
-            
-            # Salvar a imagem processada
-            output_path = os.path.join(args.output_dir, os.path.basename(file_path).replace(".dcm", ".png"))
-            cv2.imwrite(output_path, img)
-            print(f"Imagem salva em: {output_path}")
-            
-            # Salvar a máscara das massas
-            # mask_path = os.path.join(args.mask_dir, os.path.basename(file_path).replace(".dcm", "_mask.png"))
-            # cv2.imwrite(mask_path, mass_mask)
-            # print(f"Máscara salva em: {mask_path}")
-            
-            # Extrair a bounding box da maior massa
             bbox = mask_to_bbox(mass_mask)
             
-            # Desenhar a bounding box na imagem
-            img_with_bbox = draw_bbox(img.copy(), bbox)
+            base_name = os.path.basename(file_path).replace(".dcm", "")
+            output_path = os.path.join(args.output_dir, f"{base_name}.png")
             
-            # Salvar a imagem com a bounding box
-            bbox_path = os.path.join(args.bbox_dir, os.path.basename(file_path).replace(".dcm", "_bbox.png"))
+            if bbox is not None:
+                x_min, y_min, x_max, y_max = bbox
+                roi = img[y_min:y_max, x_min:x_max]
+                cv2.imwrite(output_path, roi)
+                print(f"ROI salva em: {output_path}")
+            else:
+                print(f"Nenhuma massa encontrada em {file_path}. Ignorando.")
+                continue
+            
+            img_with_bbox = draw_bbox(img.copy(), bbox)
+            bbox_path = os.path.join(args.bbox_dir, f"{base_name}_bbox.png")
             cv2.imwrite(bbox_path, img_with_bbox)
-            print(f"Imagem com bounding box salva em: {bbox_path}")
+            print(f"Bounding box salva em: {bbox_path}")
         except Exception as e:
             print(f"Erro ao processar {file_path}: {str(e)}")
 

@@ -1,4 +1,5 @@
 training/
+inbreast/
 .vscode/
 mamografia.png
 svm_sklearn.png
